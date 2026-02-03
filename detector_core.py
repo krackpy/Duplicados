@@ -1,22 +1,28 @@
 # -*- coding: utf-8 -*-
-"""Núcleo del detector (reutilizable) - sin dependencias externas.
+"""Núcleo del detector (reutilizable).
+
+✅ Replica la lógica de tu macro LIMPIEZA:
+- "TextToColumns" equivalente: soporta separadores ',', ';' o '\t' (auto-detecta)
+- Elimina encabezados del reporte: busca la fila que empieza con 'F.Pedido' y procesa desde ahí
+
+Reglas de negocio:
+- Comparación por FECHA DE ENTREGA (Entrega)
+- Estados válidos: RET, PRC
+- Prioridad ALTA: cuando un duplicado involucra PRC y RET
 
 Expone:
 - run_detector(in_path) -> (path_exact, path_sim)
 - detect_from_filelike(fileobj, out_dir) -> (path_exact, path_sim)
-
-Reglas:
-- Comparación por fecha de ENTREGA
-- Estados válidos: RET, PRC
-- Prioridad ALTA: par/grupo con PRC y RET
 """
 
 import csv
 import math
 from collections import defaultdict
 from datetime import datetime
+from io import StringIO
 from pathlib import Path
 
+# ---------------- CONFIG (ajustable) ----------------
 MAX_DIAS = 2
 MIN_SIM_IMPORTE = 0.95
 MIN_SIM_PRODUCTOS = 0.85
@@ -34,6 +40,7 @@ COL_STS = 'Sts'
 
 ESTADOS_VALIDOS = {'RET', 'PRC'}
 
+# ---------------- Utilidades ----------------
 
 def _strip(s):
     return (s or '').strip()
@@ -82,46 +89,74 @@ def prioridad(sts_a, sts_b):
 
 
 def _find_header_index(lines):
-    for i, line in enumerate(lines[:800]):
+    # Busca la fila que inicia la cabecera real del reporte
+    for i, line in enumerate(lines[:2000]):
         if line.strip().startswith('F.Pedido'):
             return i
     return None
 
 
-def iter_rows_from_path(path: Path):
-    with path.open('r', encoding='latin1', errors='ignore', newline='') as f:
-        lines = f.readlines()
+def _detect_delimiter(sample_line: str) -> str:
+    """Auto-detección simple (tipo TextToColumns).
+    Si el archivo viene con ';' (Excel ES) o ',' o tab, elegimos el más probable.
+    """
+    # Normalizar tabs visibles
+    c_comma = sample_line.count(',')
+    c_semi = sample_line.count(';')
+    c_tab = sample_line.count('\t')
+
+    if c_tab > max(c_comma, c_semi):
+        return '\t'
+    if c_semi > c_comma:
+        return ';'
+    return ','
+
+
+def _rows_from_text(text: str):
+    lines = text.splitlines(True)
     header_idx = _find_header_index(lines)
     if header_idx is None:
-        raise RuntimeError('No se encontró la cabecera (línea que inicia con F.Pedido)')
+        raise RuntimeError("No se encontró la cabecera (línea que inicia con 'F.Pedido')")
 
-    with path.open('r', encoding='latin1', errors='ignore', newline='') as f:
-        for _ in range(header_idx):
-            next(f)
-        reader = csv.DictReader(f, delimiter=',')
-        reader.fieldnames = [fn.strip() for fn in reader.fieldnames]
+    content = ''.join(lines[header_idx:])
+
+    # Elegimos delimitador basado en la línea de cabecera
+    header_line = lines[header_idx]
+    delim = _detect_delimiter(header_line)
+
+    # Si viene con TAB, lo dejamos; si viene con ';' o ',', csv.DictReader lo maneja.
+    # También aplicamos un fallback: si el header queda con 1 sola columna, probamos el otro delimiter.
+    def parse_with(d):
+        reader = csv.DictReader(StringIO(content), delimiter=d)
+        if reader.fieldnames:
+            reader.fieldnames = [fn.strip() for fn in reader.fieldnames]
         for row in reader:
             yield {k.strip(): _strip(v) for k, v in row.items()}
 
+    # Intento 1
+    parsed = list(parse_with(delim))
+    if parsed and (len(parsed[0].keys()) <= 2):
+        # fallback al alternativo
+        alt = ',' if delim == ';' else ';'
+        parsed = list(parse_with(alt))
+
+    for row in parsed:
+        yield row
+
+
+def iter_rows_from_path(path: Path):
+    raw = path.read_bytes()
+    text = raw.decode('latin1', errors='ignore')
+    yield from _rows_from_text(text)
+
 
 def iter_rows_from_filelike(fileobj):
-    # fileobj: bytes or text file-like
     data = fileobj.read()
     if isinstance(data, bytes):
         text = data.decode('latin1', errors='ignore')
     else:
         text = data
-    lines = text.splitlines(True)
-    header_idx = _find_header_index(lines)
-    if header_idx is None:
-        raise RuntimeError('No se encontró la cabecera (línea que inicia con F.Pedido)')
-
-    # Construir DictReader desde la cabecera
-    content = ''.join(lines[header_idx:])
-    reader = csv.DictReader(content.splitlines(), delimiter=',')
-    reader.fieldnames = [fn.strip() for fn in reader.fieldnames]
-    for row in reader:
-        yield {k.strip(): _strip(v) for k, v in row.items()}
+    yield from _rows_from_text(text)
 
 
 def write_csv(path: Path, rows, fieldnames):
@@ -139,6 +174,7 @@ def write_csv(path: Path, rows, fieldnames):
 def _detect(rows_iter, out_exact: Path, out_sim: Path):
     orders = {}
 
+    # 1) Armar pedidos desde líneas
     for row in rows_iter:
         sts = _strip(row.get(COL_STS))
         if sts and sts not in ESTADOS_VALIDOS:
@@ -182,11 +218,12 @@ def _detect(rows_iter, out_exact: Path, out_sim: Path):
 
     orders_list = list(orders.values())
 
+    # 2) Firmas
     for o in orders_list:
         o['Importe_r'] = round(o['Importe'] or 0.0, REDONDEO_IMPORTE)
         o['prd_tuple'] = tuple(sorted((p, round(q, REDONDEO_CANT)) for p, q in o['prd_qty'].items() if p))
 
-    # Exactos
+    # 3) Exactos
     exact_groups = defaultdict(list)
     for o in orders_list:
         k = (o['Client'], o['Entrega'], o['Importe_r'], o['prd_tuple'])
@@ -200,7 +237,7 @@ def _detect(rows_iter, out_exact: Path, out_sim: Path):
             for o in items:
                 exact_rows.append({
                     'Client': o['Client'],
-                    'Razon social': o.get('Razon social',''),
+                    'Razon social': o.get('Razon social', ''),
                     'Sts': o.get('Sts', ''),
                     'Pedido': o['Pedido'],
                     'Entrega': o.get('Entrega'),
@@ -215,7 +252,7 @@ def _detect(rows_iter, out_exact: Path, out_sim: Path):
     else:
         write_csv(out_exact, [], ['Client','Razon social','Sts','Pedido','Entrega','Importe','prioridad','n_productos','firma_productos'])
 
-    # Similares
+    # 4) Similares
     by_client = defaultdict(list)
     for o in orders_list:
         if o.get('Entrega') is not None:
