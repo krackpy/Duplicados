@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 """Núcleo del detector (reutilizable).
 
-✅ Replica la lógica de tu macro LIMPIEZA:
-- "TextToColumns" equivalente: soporta separadores ',', ';' o '\t' (auto-detecta)
-- Elimina encabezados del reporte: busca la fila que empieza con 'F.Pedido' y procesa desde ahí
+Incluye limpieza tipo macro LIMPIEZA:
+- Detecta separador (',', ';' o tab) como TextToColumns
+- Ignora encabezados del reporte y empieza desde la fila que inicia con 'F.Pedido'
 
 Reglas de negocio:
 - Comparación por FECHA DE ENTREGA (Entrega)
 - Estados válidos: RET, PRC
-- Prioridad ALTA: cuando un duplicado involucra PRC y RET
+- ✅ Exactos: SOLO se calculan para RET (como pediste)
+- Similares: se calculan con RET/PRC y prioridad ALTA cuando hay PRC vs RET
 
 Expone:
 - run_detector(in_path) -> (path_exact, path_sim)
@@ -22,7 +23,7 @@ from datetime import datetime
 from io import StringIO
 from pathlib import Path
 
-# ---------------- CONFIG (ajustable) ----------------
+# ---------------- CONFIG ----------------
 MAX_DIAS = 2
 MIN_SIM_IMPORTE = 0.95
 MIN_SIM_PRODUCTOS = 0.85
@@ -83,13 +84,12 @@ def sim_importe(a, b):
 
 
 def prioridad(sts_a, sts_b):
-    sts_a = (sts_a or '').strip()
-    sts_b = (sts_b or '').strip()
+    sts_a = (sts_a or '').strip().upper()
+    sts_b = (sts_b or '').strip().upper()
     return 'ALTA' if ({sts_a, sts_b} == {'PRC', 'RET'}) else 'MEDIA'
 
 
 def _find_header_index(lines):
-    # Busca la fila que inicia la cabecera real del reporte
     for i, line in enumerate(lines[:2000]):
         if line.strip().startswith('F.Pedido'):
             return i
@@ -97,14 +97,9 @@ def _find_header_index(lines):
 
 
 def _detect_delimiter(sample_line: str) -> str:
-    """Auto-detección simple (tipo TextToColumns).
-    Si el archivo viene con ';' (Excel ES) o ',' o tab, elegimos el más probable.
-    """
-    # Normalizar tabs visibles
     c_comma = sample_line.count(',')
     c_semi = sample_line.count(';')
     c_tab = sample_line.count('\t')
-
     if c_tab > max(c_comma, c_semi):
         return '\t'
     if c_semi > c_comma:
@@ -119,13 +114,9 @@ def _rows_from_text(text: str):
         raise RuntimeError("No se encontró la cabecera (línea que inicia con 'F.Pedido')")
 
     content = ''.join(lines[header_idx:])
-
-    # Elegimos delimitador basado en la línea de cabecera
     header_line = lines[header_idx]
     delim = _detect_delimiter(header_line)
 
-    # Si viene con TAB, lo dejamos; si viene con ';' o ',', csv.DictReader lo maneja.
-    # También aplicamos un fallback: si el header queda con 1 sola columna, probamos el otro delimiter.
     def parse_with(d):
         reader = csv.DictReader(StringIO(content), delimiter=d)
         if reader.fieldnames:
@@ -133,10 +124,8 @@ def _rows_from_text(text: str):
         for row in reader:
             yield {k.strip(): _strip(v) for k, v in row.items()}
 
-    # Intento 1
     parsed = list(parse_with(delim))
     if parsed and (len(parsed[0].keys()) <= 2):
-        # fallback al alternativo
         alt = ',' if delim == ';' else ';'
         parsed = list(parse_with(alt))
 
@@ -145,8 +134,7 @@ def _rows_from_text(text: str):
 
 
 def iter_rows_from_path(path: Path):
-    raw = path.read_bytes()
-    text = raw.decode('latin1', errors='ignore')
+    text = path.read_bytes().decode('latin1', errors='ignore')
     yield from _rows_from_text(text)
 
 
@@ -176,7 +164,7 @@ def _detect(rows_iter, out_exact: Path, out_sim: Path):
 
     # 1) Armar pedidos desde líneas
     for row in rows_iter:
-        sts = _strip(row.get(COL_STS))
+        sts = _strip(row.get(COL_STS)).upper()
         if sts and sts not in ESTADOS_VALIDOS:
             continue
 
@@ -223,17 +211,17 @@ def _detect(rows_iter, out_exact: Path, out_sim: Path):
         o['Importe_r'] = round(o['Importe'] or 0.0, REDONDEO_IMPORTE)
         o['prd_tuple'] = tuple(sorted((p, round(q, REDONDEO_CANT)) for p, q in o['prd_qty'].items() if p))
 
-    # 3) Exactos
+    # 3) Exactos (✅ SOLO RET)
+    orders_ret = [o for o in orders_list if str(o.get('Sts','')).upper() == 'RET']
+
     exact_groups = defaultdict(list)
-    for o in orders_list:
+    for o in orders_ret:
         k = (o['Client'], o['Entrega'], o['Importe_r'], o['prd_tuple'])
         exact_groups[k].append(o)
 
     exact_rows = []
     for k, items in exact_groups.items():
         if len(items) > 1:
-            sts_set = {it.get('Sts', '') for it in items}
-            prio = 'ALTA' if ('PRC' in sts_set and 'RET' in sts_set) else 'MEDIA'
             for o in items:
                 exact_rows.append({
                     'Client': o['Client'],
@@ -242,7 +230,7 @@ def _detect(rows_iter, out_exact: Path, out_sim: Path):
                     'Pedido': o['Pedido'],
                     'Entrega': o.get('Entrega'),
                     'Importe': o.get('Importe'),
-                    'prioridad': prio,
+                    'prioridad': 'MEDIA',
                     'n_productos': len(o['prd_tuple']),
                     'firma_productos': o['prd_tuple'],
                 })
@@ -252,7 +240,7 @@ def _detect(rows_iter, out_exact: Path, out_sim: Path):
     else:
         write_csv(out_exact, [], ['Client','Razon social','Sts','Pedido','Entrega','Importe','prioridad','n_productos','firma_productos'])
 
-    # 4) Similares
+    # 4) Similares (RET/PRC)
     by_client = defaultdict(list)
     for o in orders_list:
         if o.get('Entrega') is not None:
