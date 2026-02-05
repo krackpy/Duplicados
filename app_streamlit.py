@@ -59,7 +59,7 @@ with colB:
 with colC:
     incluir_exactos_clientes = st.checkbox('Incluir EXACTOS en clientes únicos', value=True)
 with colD:
-    st.info('Tip: Se detecta separador ; , o tab (como TextToColumns) y se ignoran encabezados antes de F.Pedido.')
+    st.info('')
 
 
 def _normalize_client_series(s: pd.Series) -> pd.Series:
