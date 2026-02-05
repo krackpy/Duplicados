@@ -7,7 +7,7 @@ from datetime import date, timedelta
 import pandas as pd
 import altair as alt
 
-from detector_core import detect_from_filelike, orders_from_filelike, DetectorConfig
+from detector_core import detect_from_fileli
 
 # ---------------- UI / Estilos ----------------
 FUTURISTIC_CSS = """
