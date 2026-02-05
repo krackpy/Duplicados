@@ -55,7 +55,7 @@ colA, colB, colC, colD = st.columns([1,1,1,2])
 with colA:
     solo_alta = st.checkbox('Solo PRIORIDAD ALTA', value=False)
 with colB:
-    mostrar_firma = st.checkbox('Mostrar firma_productos completa', value=False)
+    mostrar_firma = st.checkbox('Mostrar Codigos_productos completa', value=False)
 with colC:
     incluir_exactos_clientes = st.checkbox('Incluir EXACTOS en clientes únicos', value=True)
 with colD:
