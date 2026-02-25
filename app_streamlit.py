@@ -165,7 +165,7 @@ with tempfile.TemporaryDirectory() as td:
 
     with tab1:
         st.subheader('🟡 Duplicados similares')
-        vista = st.radio('Vista', ['Detalle (sin repetir Client)', 'Agrupada por cliente (1 fila por Client)'], horizontal=True)
+        vista = st.radio('Vista', ['Detalle', 'Agrupada por cliente'], horizontal=True)
 
         if df_sim_f.empty:
             st.info('No hay similares con los criterios actuales.')
@@ -193,7 +193,7 @@ with tempfile.TemporaryDirectory() as td:
         st.download_button('Descargar duplicados_similares.csv', data=out_sim.read_bytes(), file_name='duplicados_similares.csv', mime='text/csv')
 
     with tab2:
-        st.subheader('✅ Duplicados exactos (sin repetir Client)')
+        st.subheader('✅ Duplicados exactos')
         df_show = df_exact_f.copy()
         if not mostrar_firma and not df_show.empty and 'firma_productos' in df_show.columns:
             df_show['firma_productos'] = df_show['firma_productos'].astype(str).str.slice(0,120) + '…'
