@@ -43,10 +43,10 @@ textarea, input {
 </style>
 """
 
-st.set_page_config(page_title='Detector de Pedidos Duplicados', page_icon='📦', layout='wide')
+st.set_page_config(page_title='Detector de Pedidos Duplicados', page_icon='🖥️', layout='wide')
 st.markdown(FUTURISTIC_CSS, unsafe_allow_html=True)
 
-st.title('📦 Detector de pedidos duplicados / similares')
+st.title('🖥️ Detector de pedidos duplicados / similares')
 st.caption('Compara por fecha de entrega. Estados: RET/PRC. Prioridad ALTA cuando un duplicado es PRC vs RET.')
 
 uploaded = st.file_uploader('Subí el archivo (CSV del reporte)', type=['csv'])
@@ -55,12 +55,12 @@ colA, colB, colC, colD = st.columns([1,1,1,2])
 with colA:
     solo_alta = st.checkbox('Solo PRIORIDAD ALTA', value=False)
 with colB:
-    mostrar_firma = st.checkbox('Mostrar firma_productos completa', value=False)
+    mostrar_firma = st.checkbox('Mostrar Codigos de productos', value=False)
 with colC:
     incluir_exactos_clientes = st.checkbox('Incluir EXACTOS en clientes únicos', value=True)
-with colD:
-    st.info('Tip: Se detecta separador ; , o tab (como TextToColumns) y se ignoran encabezados antes de F.Pedido.')
-
+#with colD:
+    #st.info('Tip: Se detecta separador ; , o tab (como TextToColumns) y se ignoran encabezados antes de F.Pedido.')
+#    st.info("🖥️")
 
 def _normalize_client_series(s: pd.Series) -> pd.Series:
     # deja solo dígitos y quita espacios/caracteres raros
@@ -214,7 +214,8 @@ with tempfile.TemporaryDirectory() as td:
 
     with tab4:
         st.subheader('📨 Enviar a preventivos')
-        prefill = '\n'.join(df_clients_sum['Client'].astype(str).tolist()) if not df_clients_sum.empty else ''
+        prefill = '\n'.join(df_clients_sum['Client'].str.replace('^\d+\s*', '', regex=True).tolist()) if not df_clients_sum.empty else ''
+        #prefill = '\n'.join(df_clients_sum['Client'].astype(str).tolist()) if not df_clients_sum.empty else ''
         clientes_texto = st.text_area('Clientes (uno por línea / coma / espacio / ;)', value=prefill, height=220)
         formato = st.selectbox('Formato', ['Líneas', 'Coma', 'Punto y coma'], index=0)
         solo_alta_msg = st.checkbox('Solo ALTA en mensaje', value=False)
@@ -237,3 +238,4 @@ with tempfile.TemporaryDirectory() as td:
             st.code(mensaje, language='text')
             st.download_button('Descargar mensaje_preventivos.txt', data=mensaje.encode('utf-8'),
                                file_name='mensaje_preventivos.txt', mime='text/plain')
+
