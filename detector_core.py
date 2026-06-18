@@ -8,7 +8,7 @@ Incluye limpieza tipo macro LIMPIEZA:
 Reglas de negocio:
 - Comparación por FECHA DE ENTREGA (Entrega)
 - Estados válidos: RET, PRC
-- ✅ Exactos: SOLO se calculan para RET (como pediste)
+- ✅ Exactos: SOLO se calculan para RET 
 - Similares: se calculan con RET/PRC y prioridad ALTA cuando hay PRC vs RET
 
 Expone:
