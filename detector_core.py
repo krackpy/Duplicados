@@ -39,7 +39,7 @@ COL_CANT = 'Cant'
 COL_RAZON = 'Razon social'
 COL_STS = 'Sts'
 
-ESTADOS_VALIDOS = {'RET', 'PRC'}
+ESTADOS_VALIDOS = {'RET', 'PRC', 'LIB'}
 
 # ---------------- Utilidades ----------------
 
@@ -212,8 +212,8 @@ def _detect(rows_iter, out_exact: Path, out_sim: Path):
         o['prd_tuple'] = tuple(sorted((p, round(q, REDONDEO_CANT)) for p, q in o['prd_qty'].items() if p))
 
     # 3) Exactos (✅ SOLO RET)
-    orders_ret = [o for o in orders_list if str(o.get('Sts','')).upper() == 'RET']
-
+    #orders_ret = [o for o in orders_list if str(o.get('Sts','')).upper() == 'RET']
+    orders_ret = [o for o in orders_list if str(o.get('Sts','')).upper() in ['RET', 'LIB']]
     exact_groups = defaultdict(list)
     for o in orders_ret:
         k = (o['Client'], o['Entrega'], o['Importe_r'], o['prd_tuple'])
