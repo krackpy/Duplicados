@@ -45,8 +45,12 @@ ESTADOS_VALIDOS = {'RET', 'PRC', 'LIB'}
 
 def _strip(s):
     return (s or '').strip()
-
-
+#Corregir el espacio
+def normalize_client(s):
+    s = (s or '').strip()
+    digits = ''.join(c for c in s if c.isdigit())
+    return digits if digits else None
+    
 def parse_fecha_entrega(s):
     s = _strip(s)
     try:
@@ -167,8 +171,8 @@ def _detect(rows_iter, out_exact: Path, out_sim: Path):
         sts = _strip(row.get(COL_STS)).upper()
         if sts and sts not in ESTADOS_VALIDOS:
             continue
-
-        client = _strip(row.get(COL_CLIENTE))
+        #Correccion de espacios
+        client = normalize_client(row.get(COL_CLIENTE))
         pedido = _strip(row.get(COL_PEDIDO))
         if not client or not pedido:
             continue
