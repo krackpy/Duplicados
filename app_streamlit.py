@@ -3,6 +3,9 @@ import streamlit as st
 import tempfile
 from pathlib import Path
 import pandas as pd
+import importlib
+import detector_core
+importlib.reload(detector_core)
 from detector_core import detect_from_filelike
 
 FUTURISTIC_CSS = """
