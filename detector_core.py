@@ -24,7 +24,7 @@ from io import StringIO
 from pathlib import Path
 
 # ---------------- CONFIG ----------------
-MAX_DIAS = 2
+MAX_DIAS = 4
 MIN_SIM_IMPORTE = 0.95
 MIN_SIM_PRODUCTOS = 0.85
 REDONDEO_IMPORTE = 2
